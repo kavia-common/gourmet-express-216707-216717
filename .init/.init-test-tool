@@ -1,0 +1,4 @@
+{
+    "command": "pytest",
+    "working_directory": "/home/kavia/workspace/code-generation/gourmet-express-216707-216717/food_delivery_backend"
+}

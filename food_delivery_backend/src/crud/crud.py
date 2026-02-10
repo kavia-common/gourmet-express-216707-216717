@@ -166,6 +166,12 @@ def upsert_payment_for_order(
 
 
 # PUBLIC_INTERFACE
+def get_payment_by_provider_payment_id(db: Session, *, provider_payment_id: str) -> Optional[Payment]:
+    """Fetch payment by provider_payment_id."""
+    return db.scalar(select(Payment).where(Payment.provider_payment_id == provider_payment_id))
+
+
+# PUBLIC_INTERFACE
 def create_delivery(db: Session, *, order_id: int, delivery_person_id: Optional[int] = None, eta_minutes: Optional[int] = None) -> Delivery:
     """Create delivery for an order (one-to-one)."""
     delivery = Delivery(order_id=order_id, delivery_person_id=delivery_person_id, eta_minutes=eta_minutes, status="assigned" if delivery_person_id else "unassigned")
@@ -181,6 +187,49 @@ def create_delivery(db: Session, *, order_id: int, delivery_person_id: Optional[
 
 
 # PUBLIC_INTERFACE
+def get_delivery_by_id(db: Session, *, delivery_id: int) -> Optional[Delivery]:
+    """Get delivery by id."""
+    return db.get(Delivery, delivery_id)
+
+
+# PUBLIC_INTERFACE
+def get_delivery_by_order_id(db: Session, *, order_id: int) -> Optional[Delivery]:
+    """Get delivery by order id."""
+    return db.scalar(select(Delivery).where(Delivery.order_id == order_id))
+
+
+# PUBLIC_INTERFACE
+def list_deliveries(db: Session, *, delivery_person_id: Optional[int] = None) -> list[Delivery]:
+    """List deliveries, optionally filtered by delivery_person_id."""
+    stmt = select(Delivery)
+    if delivery_person_id is not None:
+        stmt = stmt.where(Delivery.delivery_person_id == delivery_person_id)
+    stmt = stmt.order_by(Delivery.created_at.desc())
+    return list(db.scalars(stmt))
+
+
+# PUBLIC_INTERFACE
+def assign_delivery(db: Session, *, delivery_id: int, delivery_person_id: int, eta_minutes: Optional[int] = None) -> Delivery:
+    """Assign a delivery to a delivery person (and set status to 'assigned' if currently unassigned)."""
+    delivery = db.get(Delivery, delivery_id)
+    if delivery is None:
+        raise ValueError("Delivery not found")
+
+    delivery.delivery_person_id = delivery_person_id
+    if eta_minutes is not None:
+        delivery.eta_minutes = eta_minutes
+
+    # Ensure status aligns with assignment
+    if delivery.status == "unassigned":
+        delivery.status = "assigned"
+        db.add(DeliveryStatusHistory(delivery_id=delivery_id, status="assigned", note="Assigned to delivery person"))
+
+    db.commit()
+    db.refresh(delivery)
+    return delivery
+
+
+# PUBLIC_INTERFACE
 def set_delivery_status(db: Session, *, delivery_id: int, status: str, note: Optional[str] = None) -> Delivery:
     """Update delivery status and append to history."""
     delivery = db.get(Delivery, delivery_id)
@@ -192,3 +241,10 @@ def set_delivery_status(db: Session, *, delivery_id: int, status: str, note: Opt
     db.commit()
     db.refresh(delivery)
     return delivery
+
+
+# PUBLIC_INTERFACE
+def list_delivery_status_history(db: Session, *, delivery_id: int) -> list[DeliveryStatusHistory]:
+    """List status history entries for a delivery."""
+    stmt = select(DeliveryStatusHistory).where(DeliveryStatusHistory.delivery_id == delivery_id).order_by(DeliveryStatusHistory.created_at.asc())
+    return list(db.scalars(stmt))

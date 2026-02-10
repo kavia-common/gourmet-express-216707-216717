@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -128,6 +128,30 @@ class PaymentRead(_BaseSchema):
     updated_at: datetime
 
 
+class MockPaymentIntentCreate(_BaseSchema):
+    order_id: int = Field(..., description="Order id to create/initiate a mock payment for.")
+    provider: str = Field("mock", description="Payment provider identifier.")
+    amount: Optional[Decimal] = Field(None, description="If omitted, uses order.total_amount.")
+    currency: str = Field("USD", min_length=3, max_length=3, description="3-letter currency code.")
+    succeed: bool = Field(True, description="If true, intent is created as 'authorized'; else 'failed'.")
+
+
+class MockPaymentIntentRead(_BaseSchema):
+    payment: PaymentRead
+    checkout_url: str = Field(..., description="Mock checkout URL (for UI simulation).")
+    provider_payment_id: str = Field(..., description="Mock provider payment id.")
+
+
+class PaymentWebhookEvent(_BaseSchema):
+    """Generic webhook event payload for mock provider."""
+    provider: str = Field("mock", description="Provider name.")
+    event_type: str = Field(..., description="Event type, e.g. payment.authorized, payment.captured, payment.failed.")
+    provider_payment_id: str = Field(..., description="Provider payment id for correlation.")
+    order_id: int = Field(..., description="Order id related to this payment.")
+    status: str = Field(..., description="New payment status: pending/authorized/captured/failed/refunded.")
+    raw: Dict[str, Any] = Field(default_factory=dict, description="Raw provider payload for debugging.")
+
+
 # -------------------------
 # Deliveries
 # -------------------------
@@ -147,6 +171,11 @@ class DeliveryRead(_BaseSchema):
     updated_at: datetime
 
 
+class DeliveryAssignRequest(_BaseSchema):
+    delivery_person_id: int = Field(..., description="User id of the delivery person.")
+    eta_minutes: Optional[int] = Field(None, ge=1, description="Optional ETA in minutes.")
+
+
 class DeliveryStatusHistoryCreate(_BaseSchema):
     delivery_id: int
     status: str = Field(..., max_length=50)
@@ -159,3 +188,8 @@ class DeliveryStatusHistoryRead(_BaseSchema):
     status: str
     note: Optional[str]
     created_at: datetime
+
+
+class DeliveryWithHistoryRead(_BaseSchema):
+    delivery: DeliveryRead
+    history: list[DeliveryStatusHistoryRead] = Field(default_factory=list)
